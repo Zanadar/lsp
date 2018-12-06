@@ -3,8 +3,8 @@
 package lsp
 
 import (
-	"container/list"
 	"errors"
+	"time"
 
 	"github.com/cmu440/lspnet"
 )
@@ -28,17 +28,18 @@ type client struct {
 func NewClient(hostport string, params *Params) (Client, error) {
 	addr, err := lspnet.ResolveUDPAddr("udp", hostport)
 	if err != nil {
-		return err
+		return &client{}, err
 	}
 	conn, err := lspnet.DialUDP("udp", nil, addr)
 	if err != nil {
-		return err
+		return &client{}, err
 	}
-	msgs := make(chan Message)
+	msgs := make(chan *Message)
 	go func() {
 		select {
 		case msg := <-msgs:
-			conn.Write()
+			msg.String()
+			conn.Write([]byte{})
 		}
 	}()
 
@@ -71,11 +72,35 @@ type pending struct {
 	msg  Message
 }
 
-type Pending struct {
+type Window struct {
 	inflight int
 	wFront   int
 	wBack    int
-	pending  []pending
+	buff     []pending
+	msgs     chan Message
+	get      chan chan []pending
+	done     chan struct{}
 }
 
-func (f)
+func (w *Window) start() {
+	go func() {
+		for {
+			select {
+			case msg := <-w.msgs:
+				w.buff = append(w.buff, pending{time.Now(), msg})
+			case get := <-w.get:
+				get <- w.buff
+			}
+		}
+	}()
+}
+
+func (w *Window) queue(m *Message) {
+	w.msgs <- *m
+}
+
+func (w *Window) pending() []pending {
+	get := make(chan []pending)
+	w.get <- get
+	return <-get
+}
